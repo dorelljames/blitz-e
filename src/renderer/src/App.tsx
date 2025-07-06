@@ -465,37 +465,66 @@ card content`
 
   const jsLoaded = useJsLoaded()
 
+  // Find the first task from the "To Do" column
+  const getFirstTask = () => {
+    const todoColumn = columns.find((col) => col.title === 'To Do')
+    if (todoColumn && todoColumn.items.length > 0) {
+      return todoColumn.items[0]
+    }
+    // Fall back to first task in any column
+    for (const column of columns) {
+      if (column.items.length > 0) {
+        return column.items[0]
+      }
+    }
+    return { id: 'default', title: 'No tasks available' }
+  }
+
+  const handleFocusMode = () => {
+    const firstTask = getFirstTask()
+    window.electron.ipcRenderer.send('focus-mode', firstTask)
+  }
+
   return (
-    <KanbanBoard ref={scrollContainerReference}>
-      {columns.map((column) =>
-        jsLoaded ? (
-          <MyKanbanBoardColumn
-            activeCardId={activeCardId}
-            column={column}
-            key={column.id}
-            onAddCard={handleAddCard}
-            onCardBlur={handleCardBlur}
-            onCardKeyDown={handleCardKeyDown}
-            onDeleteCard={handleDeleteCard}
-            onDeleteColumn={handleDeleteColumn}
-            onMoveCardToColumn={handleMoveCardToColumn}
-            onUpdateCardTitle={handleUpdateCardTitle}
-            onUpdateColumnTitle={handleUpdateColumnTitle}
-          />
+    <div className="relative">
+      <KanbanBoard ref={scrollContainerReference}>
+        {columns.map((column) =>
+          jsLoaded ? (
+            <MyKanbanBoardColumn
+              activeCardId={activeCardId}
+              column={column}
+              key={column.id}
+              onAddCard={handleAddCard}
+              onCardBlur={handleCardBlur}
+              onCardKeyDown={handleCardKeyDown}
+              onDeleteCard={handleDeleteCard}
+              onDeleteColumn={handleDeleteColumn}
+              onMoveCardToColumn={handleMoveCardToColumn}
+              onUpdateCardTitle={handleUpdateCardTitle}
+              onUpdateColumnTitle={handleUpdateColumnTitle}
+            />
+          ) : (
+            <KanbanBoardColumnSkeleton key={column.id} />
+          )
+        )}
+
+        {/* Add a new column */}
+        {jsLoaded ? (
+          <MyNewKanbanBoardColumn onAddColumn={handleAddColumn} />
         ) : (
-          <KanbanBoardColumnSkeleton key={column.id} />
-        )
-      )}
+          <Skeleton className="h-9 w-10.5 flex-shrink-0" />
+        )}
 
-      {/* Add a new column */}
-      {jsLoaded ? (
-        <MyNewKanbanBoardColumn onAddColumn={handleAddColumn} />
-      ) : (
-        <Skeleton className="h-9 w-10.5 flex-shrink-0" />
-      )}
+        <KanbanBoardExtraMargin />
+      </KanbanBoard>
 
-      <KanbanBoardExtraMargin />
-    </KanbanBoard>
+      {/* Focus Mode Button */}
+      <div className="absolute bottom-4 right-4">
+        <Button onClick={handleFocusMode} className="shadow-lg">
+          Focus Mode
+        </Button>
+      </div>
+    </div>
   )
 }
 

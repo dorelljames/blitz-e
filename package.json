@@ -94,6 +94,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@tailwindcss/oxide",
       "electron",
       "esbuild"
     ]

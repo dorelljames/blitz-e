@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Focus Mode</title>
+    <style>
+      body {
+        margin: 0;
+        background: transparent;
+        color: white;
+        font-family: sans-serif;
+        overflow: hidden;
+      }
+
+      .focus-bar {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(30, 30, 30, 0.95);
+        padding: 12px 20px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        z-index: 10000;
+        user-select: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(10px);
+      }
+
+      .drag-region {
+        -webkit-app-region: drag;
+        flex-grow: 1;
+        cursor: move;
+        padding: 5px 10px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+
+      .task-title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 500;
+        color: #fff;
+      }
+
+      .countdown {
+        font-size: 16px;
+        font-weight: bold;
+        color: #4ade80;
+        font-family: monospace;
+      }
+
+      .exit-btn {
+        -webkit-app-region: no-drag;
+        margin-left: 16px;
+        background: rgba(239, 68, 68, 0.8);
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background 0.2s;
+      }
+
+      .exit-btn:hover {
+        background: rgba(239, 68, 68, 1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="focus-bar">
+      <div class="drag-region">
+        <h3 class="task-title" id="task-title">Focus Mode</h3>
+        <div class="countdown" id="countdown">25:00</div>
+      </div>
+      <button type="button" class="exit-btn" id="exit-btn">Exit</button>
+    </div>
+
+    <script>
+      console.log('Focus mode script loaded')
+
+      let countdownSeconds = 25 * 60
+      let countdownInterval = null
+
+      // Handle task data from main process
+      if (window.electron && window.electron.ipcRenderer) {
+        window.electron.ipcRenderer.on('task-data', (_, task) => {
+          console.log('Received task data:', task)
+          const taskTitleEl = document.getElementById('task-title')
+          if (taskTitleEl) {
+            taskTitleEl.innerText = task.title || 'Focus Mode'
+          }
+          startCountdown()
+        })
+      }
+
+      // Start countdown timer
+      function startCountdown() {
+        const countdownEl = document.getElementById('countdown')
+        if (!countdownEl) return
+
+        if (countdownInterval) {
+          clearInterval(countdownInterval)
+        }
+
+        countdownInterval = setInterval(() => {
+          const mins = Math.floor(countdownSeconds / 60)
+          const secs = countdownSeconds % 60
+          countdownEl.innerText = `${mins}:${secs.toString().padStart(2, '0')}`
+
+          if (countdownSeconds <= 0) {
+            clearInterval(countdownInterval)
+            countdownInterval = null
+            // Notify completion
+            if (window.electron && window.electron.ipcRenderer) {
+              window.electron.ipcRenderer.send('focus-complete')
+            }
+          }
+
+          countdownSeconds--
+        }, 1000)
+      }
+
+      // Handle exit button click
+      document.addEventListener('DOMContentLoaded', () => {
+        const exitBtn = document.getElementById('exit-btn')
+        if (exitBtn) {
+          exitBtn.addEventListener('click', () => {
+            if (window.electron && window.electron.ipcRenderer) {
+              window.electron.ipcRenderer.send('exit-focus-mode')
+            }
+          })
+        }
+
+        // Start countdown immediately if no task data is received
+        setTimeout(() => {
+          startCountdown()
+        }, 1000)
+      })
+
+      // Clean up on window close
+      window.addEventListener('beforeunload', () => {
+        if (countdownInterval) {
+          clearInterval(countdownInterval)
+        }
+      })
+    </script>
+  </body>
+</html>

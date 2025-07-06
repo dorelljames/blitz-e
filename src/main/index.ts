@@ -1,11 +1,16 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { BrowserWindow, app, ipcMain, shell } from 'electron'
+import { electronApp, is, optimizer } from '@electron-toolkit/utils'
+
 import icon from '../../resources/icon.png?asset'
+import { join } from 'path'
+
+let mainWindow: BrowserWindow | null = null
+let focusWindow: BrowserWindow | null = null
+let isFocusMode = false
 
 function createWindow(): void {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
@@ -18,7 +23,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow?.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -32,6 +37,88 @@ function createWindow(): void {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+
+  // Handle main window close
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
+}
+
+function createFocusWindow(task: { title: string; id: string }): void {
+  if (focusWindow) {
+    focusWindow.focus()
+    return
+  }
+
+  focusWindow = new BrowserWindow({
+    width: 400,
+    height: 80,
+    frame: false,
+    alwaysOnTop: true,
+    transparent: true,
+    resizable: false,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true
+    }
+  })
+
+  const url = is.dev
+    ? `file://${join(__dirname, '../../src/renderer/focus/simple-focus.html')}`
+    : `file://${join(__dirname, '../renderer/focus.html')}`
+
+  console.log('Loading focus window URL:', url)
+  focusWindow.loadURL(url)
+
+  focusWindow.webContents.once('did-finish-load', () => {
+    console.log('Focus window loaded, sending task data:', task)
+    focusWindow?.webContents.send('task-data', task)
+  })
+
+  focusWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('Focus window failed to load:', errorCode, errorDescription)
+  })
+
+  focusWindow.on('closed', () => {
+    focusWindow = null
+    isFocusMode = false
+    // Show main window when focus window is closed
+    if (mainWindow) {
+      mainWindow.show()
+    }
+  })
+}
+
+function enterFocusMode(task: { title: string; id: string }): void {
+  if (isFocusMode) return
+
+  isFocusMode = true
+
+  // Hide main window
+  if (mainWindow) {
+    mainWindow.hide()
+  }
+
+  // Create focus window
+  createFocusWindow(task)
+}
+
+function exitFocusMode(): void {
+  if (!isFocusMode) return
+
+  isFocusMode = false
+
+  // Close focus window
+  if (focusWindow) {
+    focusWindow.close()
+    focusWindow = null
+  }
+
+  // Show main window
+  if (mainWindow) {
+    mainWindow.show()
   }
 }
 
@@ -49,8 +136,34 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
+  // IPC handlers
   ipcMain.on('ping', () => console.log('pong'))
+
+  // Handle focus mode toggle
+  ipcMain.on('focus-mode', (_, task) => {
+    if (isFocusMode) {
+      exitFocusMode()
+    } else {
+      enterFocusMode(task)
+    }
+  })
+
+  // Handle exit focus mode
+  ipcMain.on('exit-focus-mode', () => {
+    exitFocusMode()
+  })
+
+  // Handle focus complete
+  ipcMain.on('focus-complete', () => {
+    exitFocusMode()
+  })
+
+  // Handle request for first task
+  ipcMain.handle('get-first-task', async () => {
+    // This will be called from renderer to get the first task
+    // Return a placeholder for now - the renderer will handle the actual task selection
+    return { title: 'Focus Mode', id: 'focus' }
+  })
 
   createWindow()
 
